@@ -30,25 +30,40 @@ def load_findings():
 
 # ============================================================
 # STEP 2: grab the code around a finding
-# Shows REAL line numbers and marks the flagged line with >>>
-# so Claude never guesses positions. Column-aware for giant lines.
+# Shows REAL line numbers and marks the flagged line with >>>.
+# Special handling for findings buried inside very long lines
+# (like giant data constants) so Claude isn't misled.
 # ============================================================
 def get_code(path, line, col):
     all_lines = Path(path).read_text().splitlines()   # file -> list of lines
 
-    # If the column is huge, the finding sits inside one very long line
-    # (like a giant constant). A normal line window won't show the trigger,
-    # so we slice around the column position on that single line instead.
+    # If the column is huge, the finding sits inside one very long line.
     if col > 300:
-        target = all_lines[line - 1]                  # the one long line (line-1 = index)
-        start = max(0, col - 200)                     # 200 chars before the trigger
-        end = min(len(target), col + 200)             # 200 chars after the trigger
-        snippet = target[start:end]                   # the relevant slice
-        return (
-            f"(Note: this finding is inside a very long line at column {col}. "
-            f"Showing the relevant slice of line {line} only.)\n"
-            f"...{snippet}..."
+        target = all_lines[line - 1]                  # the long line
+        first_word = target.lstrip()[:40]             # how the line starts
+
+        # Is this line a constant/data assignment? (e.g. "CASES = (...")
+        is_constant = "= (" in first_word or "= [" in first_word or "= {" in first_word
+
+        start = max(0, col - 200)                     # slice around the trigger
+        end = min(len(target), col + 200)
+        snippet = target[start:end]
+
+        note = (
+            f"(This finding is at column {col} inside a very long line "
+            f"({len(target)} chars).\n"
         )
+        if is_constant:
+            note += (
+                f"IMPORTANT: line {line} is a DATA CONSTANT assignment that starts with "
+                f"'{first_word.strip()}...'. The flagged code is example/demo DATA inside "
+                f"this constant, not an executed code path. Attack strings stored in a "
+                f"constant do NOT run. Judge accordingly.)\n"
+            )
+        else:
+            note += "Showing the relevant slice of that line.)\n"
+
+        return note + f"...{snippet}..."
 
     # Normal case: show 10 lines before and after, WITH real line numbers
     start = max(0, line - 11)
@@ -168,10 +183,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
 
 
 
