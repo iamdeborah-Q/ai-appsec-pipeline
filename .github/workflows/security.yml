@@ -1,0 +1,55 @@
+name: AI Security Pipeline
+
+# When does this run? On every pull request, and on pushes to main.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  # ---------- JOB 1: Semgrep scan + Claude triage ----------
+  scan-and-triage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: pip install semgrep anthropic
+
+      - name: Run Semgrep (save findings as JSON)
+        run: semgrep scan --config auto --json --quiet . > findings.json || true
+
+      - name: Triage findings with Claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python3 scanner/triage.py
+
+      - name: Upload the report
+        uses: actions/upload-artifact@v4
+        with:
+          name: triage-report
+          path: report.md
+
+  # ---------- JOB 2: Build + scan the golden image ----------
+  golden-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Build the golden image
+        run: docker build -t golden-python-base golden-image/
+
+      - name: Scan with Trivy (fail on fixable HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: golden-python-base
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
