@@ -86,6 +86,21 @@ python3 scanner/triage.py          # writes report.md
   _fixable_ ones — most were unfixable upstream Debian issues. Gating on fixable
   HIGH/CRITICAL avoids alert noise, the exact problem this project fights.
 
+
+
+  - **Scanners over-report by design.** Of 10 raw Semgrep findings on DSVW, two
+  were the same line flagged by different rules and one was demo data — so the
+  real signal was ~8 unique issues. Deduplication and triage are what turn raw
+  output into an actionable list.
+- **Even official base images carry CVEs.** The "secure" python:slim image
+  reported 142 vulnerabilities out of the box. Hardening reduces them, but some
+  are inherited from upstream and can't be removed — which is why continuous
+  scanning, not one-time hardening, is the real practice.
+- **Order matters in a Dockerfile.** Upgrading pip *after* dropping to a non-root
+  user left the old vulnerable pip in place (installed into the user's local
+  folder). Moving the upgrade before the user switch replaced the system pip
+  cleanly — a reminder that security fixes can silently no-op if sequenced wrong.
+
 ## Roadmap
 
 - EPSS scoring to prioritize findings by real-world exploit probability
